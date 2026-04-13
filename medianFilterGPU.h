@@ -114,9 +114,7 @@ void MedianFilterGPU::median_filter_3x3_v2(size_t num_ch, const uint8_t* input, 
 
     q.submit([&](sycl::handler& h) {
         //выделяем память внутри shared memory (для рабочей группы)
-        sycl::local_accessor<uint8_t, 2> sharedR(sycl::range<2>(SHARED_SIZE, SHARED_SIZE), h);
-        sycl::local_accessor<uint8_t, 2> sharedG(sycl::range<2>(SHARED_SIZE, SHARED_SIZE), h);
-        sycl::local_accessor<uint8_t, 2> sharedB(sycl::range<2>(SHARED_SIZE, SHARED_SIZE), h);
+        sycl::local_accessor<uint8_t, 2> shared(sycl::range<2>(SHARED_SIZE, num_ch * SHARED_SIZE), h);
 
         h.parallel_for(
             sycl::nd_range<2>(
@@ -148,9 +146,8 @@ void MedianFilterGPU::median_filter_3x3_v2(size_t num_ch, const uint8_t* input, 
                         src_x = std::clamp(src_x, 0, (int)width - 1);
 
                         //записываем пиксель окна из глобальной памяти в shared
-                        sharedR[dst_y][dst_x] = d_input[src_y * stride + src_x*num_ch];
-                        sharedG[dst_y][dst_x] = d_input[src_y * stride + src_x*num_ch + 1];
-                        sharedB[dst_y][dst_x] = d_input[src_y * stride + src_x*num_ch + 2];
+                        for(size_t ch = 0; ch < num_ch; ++ch)
+                            shared[dst_y][dst_x * num_ch + ch] = d_input[src_y * stride + src_x*num_ch + ch];
                     }
                 }
 
@@ -159,24 +156,14 @@ void MedianFilterGPU::median_filter_3x3_v2(size_t num_ch, const uint8_t* input, 
 
                 //проверка выхода за границы изображения, если размер изображения не кратен размеру блоков рабочей группы
                 if (global_y < height && global_x < width) {
-                    uint8_t windowR[9] = {
-                        sharedR[local_y][local_x],     sharedR[local_y][local_x+1],     sharedR[local_y][local_x+2],
-                        sharedR[local_y + 1][local_x], sharedR[local_y + 1][local_x+1], sharedR[local_y + 1][local_x+2],
-                        sharedR[local_y + 2][local_x], sharedR[local_y + 2][local_x+1], sharedR[local_y + 2][local_x+2]
-                    };
-                    uint8_t windowG[9] = {
-                        sharedG[local_y][local_x],     sharedG[local_y][local_x+1],     sharedG[local_y][local_x+2],
-                        sharedG[local_y + 1][local_x], sharedG[local_y + 1][local_x+1], sharedG[local_y + 1][local_x+2],
-                        sharedG[local_y + 2][local_x], sharedG[local_y + 2][local_x+1], sharedG[local_y + 2][local_x+2]
-                    };
-                    uint8_t windowB[9] = {
-                        sharedB[local_y][local_x],     sharedB[local_y][local_x+1],     sharedB[local_y][local_x+2],
-                        sharedB[local_y + 1][local_x], sharedB[local_y + 1][local_x+1], sharedB[local_y + 1][local_x+2],
-                        sharedB[local_y + 2][local_x], sharedB[local_y + 2][local_x+1], sharedB[local_y + 2][local_x+2]
-                    };
-                    d_output[global_y * stride + num_ch * global_x] = median_9(windowR);
-                    d_output[global_y * stride + num_ch * global_x + 1] = median_9(windowG);
-                    d_output[global_y * stride + num_ch * global_x + 2] = median_9(windowB);
+                    for(size_t ch = 0; ch < num_ch; ++ch) {
+                        uint8_t window[9] = {
+                            shared[local_y][local_x*num_ch + ch],     shared[local_y][(local_x+1)*num_ch +ch],     shared[local_y][(local_x+2)*num_ch+ch],
+                            shared[local_y + 1][local_x*num_ch + ch], shared[local_y + 1][(local_x+1)*num_ch +ch], shared[local_y + 1][(local_x+2)*num_ch+ch],
+                            shared[local_y + 2][local_x*num_ch + ch], shared[local_y + 2][(local_x+1)*num_ch +ch], shared[local_y + 2][(local_x+2)*num_ch+ch]
+                        };
+                        d_output[global_y * stride + num_ch * global_x + ch] = median_9(window);
+                    }
                 }
             }
         );
