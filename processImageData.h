@@ -2,8 +2,8 @@
 
 #include "EasyBMP/EasyBMP.h"
 
-void create_BMP_grayscale(BMP& inputBMP, BMP& outputBMP,
-		uint8_t* outputPixelsRed, uint8_t* outputPixelsGreen, uint8_t* outputPixelsBlue) {
+void create_BMP_RGB(size_t num_ch, BMP& inputBMP, BMP& outputBMP,
+		uint8_t* outputPixels) {
     const int w = inputBMP.TellWidth();
     const int h = inputBMP.TellHeight();
 
@@ -30,9 +30,9 @@ void create_BMP_grayscale(BMP& inputBMP, BMP& outputBMP,
 */
     for(int y = 0; y < h; ++y) {
         for(int x = 0; x < w; ++x) {
-            outputBMP(x, y)->Red = outputPixelsRed[y*w + x];
-            outputBMP(x, y)->Green = outputPixelsGreen[y*w + x];
-            outputBMP(x, y)->Blue = outputPixelsBlue[y*w + x];
-	}
+            outputBMP(x, y)->Red = outputPixels[y*num_ch*w + x*num_ch];
+            outputBMP(x, y)->Green = outputPixels[y*num_ch*w + x*num_ch+1];
+            outputBMP(x, y)->Blue = outputPixels[y*num_ch*w + x*num_ch+2];
+	    }
     }
 }
